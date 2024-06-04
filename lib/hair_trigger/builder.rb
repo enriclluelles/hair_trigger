@@ -90,17 +90,6 @@ module HairTrigger
     def all
     end
 
-    def security(user)
-      unless [:invoker, :definer].include?(user) || user.to_s =~ /\A'[^']+'@'[^']+'\z/ || user.to_s.downcase =~ /\Acurrent_user(\(\))?\z/
-        raise DeclarationError, "trigger security should be :invoker, :definer, CURRENT_USER, or a valid user (e.g. 'user'@'host')"
-      end
-      # sqlite default is n/a, mysql default is :definer, postgres default is :invoker
-      @errors << ["sqlite doesn't support trigger security", :sqlite]
-      @errors << ["postgresql doesn't support arbitrary users for trigger security", :postgresql] unless [:definer, :invoker].include?(user)
-      @errors << ["mysql doesn't support invoker trigger security", :mysql] if user == :invoker
-      options[:security] = user
-    end
-
     def timing(timing)
       raise DeclarationError, "invalid timing" unless [:before, :after].include?(timing)
       options[:timing] = timing.to_s.upcase
@@ -159,7 +148,7 @@ module HairTrigger
         METHOD
       end
     end
-    chainable_methods :name, :on, :for_each, :before, :after, :where, :security, :timing, :events, :all, :nowrap, :of, :declare
+    chainable_methods :name, :on, :for_each, :before, :after, :where, :timing, :events, :all, :nowrap, :of, :declare
 
     def create_grouped_trigger?
       adapter_name == :mysql || adapter_name == :trilogy
@@ -430,7 +419,6 @@ END;
       raise GenerationError, "truncate triggers are only supported on postgres 8.4 and greater" if db_version < 80400 && options[:events].include?('TRUNCATE')
       raise GenerationError, "FOR EACH ROW triggers may not be triggered by truncate events" if options[:for_each] == 'ROW' && options[:events].include?('TRUNCATE')
       raise GenerationError, "declare cannot be used in conjunction with nowrap" if options[:nowrap] && options[:declare]
-      raise GenerationError, "security cannot be used in conjunction with nowrap" if options[:nowrap] && options[:security]
       raise GenerationError, "where can only be used in conjunction with nowrap on postgres 9.0 and greater" if options[:nowrap] && prepared_where && db_version < 90000
       raise GenerationError, "of can only be used in conjunction with nowrap on postgres 9.1 and greater" if options[:nowrap] && options[:of] && db_version < 90100
 
@@ -439,7 +427,6 @@ END;
       if options[:nowrap]
         trigger_action = raw_actions
       else
-        security = options[:security] if options[:security] && options[:security] != :invoker
         sql << <<-SQL
 CREATE FUNCTION #{adapter.quote_table_name(prepared_name)}()
 RETURNS TRIGGER AS $$#{declarations}
@@ -464,7 +451,7 @@ BEGIN
         end
         sql << <<-SQL
 END;
-$$ LANGUAGE plpgsql#{security ? " SECURITY #{security.to_s.upcase}" : ""};
+$$ LANGUAGE plpgsql;
         SQL
 
         trigger_action = "#{adapter.quote_table_name(prepared_name)}()"
@@ -477,9 +464,8 @@ FOR EACH #{options[:for_each]}#{prepared_where && db_version >= 90000 ? " WHEN (
     end
 
     def generate_trigger_mysql
-      security = options[:security] if options[:security] && options[:security] != :definer
       sql = <<-SQL
-CREATE #{security ? "DEFINER = #{security} " : ""}TRIGGER #{prepared_name} #{options[:timing]} #{options[:events].first} ON `#{options[:table]}`
+CREATE TRIGGER #{prepared_name} #{options[:timing]} #{options[:events].first} ON `#{options[:table]}`
 FOR EACH #{options[:for_each]}
 BEGIN
       SQL

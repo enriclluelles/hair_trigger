@@ -12,16 +12,6 @@ module HairTrigger
       ::HairTrigger::Builder.new(name, options.merge(:execute => true, :drop => true, :table => table, :adapter => self)).all{}
     end
 
-    def normalize_mysql_definer(definer)
-      user, host = definer.split('@')
-      host = @config[:host] || 'localhost' if host == '%'
-      "'#{user}'@'#{host}'" # SHOW TRIGGERS doesn't quote them, but we need quotes for creating a trigger
-    end
-
-    def implicit_mysql_definer
-      "'#{@config[:username] || 'root'}'@'#{@config[:host] || 'localhost'}'"
-    end
-
     def triggers(options = {})
       triggers = {}
       name_clause = options[:only] ? "IN ('" + options[:only].join("', '") + "')" : nil
@@ -32,11 +22,10 @@ module HairTrigger
             triggers[name] = quote_table_name_in_trigger(definition) + ";\n"
           end
         when :mysql, :trilogy
-          select_rows("SHOW TRIGGERS").each do |(name, event, table, actions, timing, created, sql_mode, definer)|
-            definer = normalize_mysql_definer(definer)
+          select_rows("SHOW TRIGGERS").each do |(name, event, table, actions, timing, created, sql_mode, _)|
             next if options[:only] && !options[:only].include?(name)
             triggers[name.strip] = <<-SQL
-CREATE #{definer != implicit_mysql_definer ? "DEFINER = #{definer} " : ""}TRIGGER #{name} #{timing} #{event} ON `#{table}`
+CREATE TRIGGER #{name} #{timing} #{event} ON `#{table}`
 FOR EACH ROW
 #{actions}
             SQL

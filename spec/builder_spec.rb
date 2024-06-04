@@ -153,15 +153,6 @@ describe "builder" do
       expect(trigger.warnings.first.first).to match /nested triggers have explicit names/
     end
 
-    it "should accept security" do
-      expect(builder.on(:foos).after(:update).security(:definer){ "FOO" }.generate.
-        grep(/DEFINER/).size).to eql(0) # default, so we don't include it
-      expect(builder.on(:foos).after(:update).security("CURRENT_USER"){ "FOO" }.generate.
-        grep(/DEFINER = CURRENT_USER/).size).to eql(1)
-      expect(builder.on(:foos).after(:update).security("'user'@'host'"){ "FOO" }.generate.
-        grep(/DEFINER = 'user'@'host'/).size).to eql(1)
-    end
-
     it "should infer `if' conditionals from `of' columns" do
       expect(builder.on(:foos).after(:update).of(:bar){ "BAZ" }.generate.join("\n")).
         to include("IF NEW.bar <> OLD.bar OR (NEW.bar IS NULL) <> (OLD.bar IS NULL) THEN")
@@ -170,12 +161,6 @@ describe "builder" do
     it "should merge `where` and `of` into an `if` conditional" do
       expect(builder.on(:foos).after(:update).of(:bar).where("lol"){ "BAZ" }.generate.join("\n")).
         to include("IF (lol) AND (NEW.bar <> OLD.bar OR (NEW.bar IS NULL) <> (OLD.bar IS NULL)) THEN")
-    end
-
-    it "should reject :invoker security" do
-      expect {
-        builder.on(:foos).after(:update).security(:invoker){ "FOO" }.generate
-      }.to raise_error /doesn't support invoker/
     end
 
     it "should reject for_each :statement" do
@@ -200,7 +185,6 @@ describe "builder" do
       it "should fully represent the builder" do
         code = <<-CODE.strip.gsub(/^ +/, '')
           on("foos").
-          security(:definer).
           for_each(:row).
           before(:update) do |t|
             t.where("NEW.foo") do
@@ -253,20 +237,6 @@ describe "builder" do
       expect(trigger.generate.grep(/AFTER UPDATE OF bar, baz/).size).to eql(1)
     end
 
-    it "should accept security" do
-      expect(builder.on(:foos).after(:update).security(:invoker){ "FOO" }.generate.
-        grep(/SECURITY/).size).to eql(0) # default, so we don't include it
-      expect(builder.on(:foos).after(:update).security(:definer){ "FOO" }.generate.
-        grep(/SECURITY DEFINER/).size).to eql(1)
-    end
-
-    it "should reject arbitrary user security" do
-      expect {
-        builder.on(:foos).after(:update).security("'user'@'host'"){ "FOO" }.
-        generate
-      }.to raise_error /doesn't support arbitrary users for trigger security/
-    end
-
     it "should accept multiple events" do
       expect(builder.on(:foos).after(:update, :delete){ "FOO" }.generate.
         grep(/UPDATE OR DELETE/).size).to eql(1)
@@ -297,12 +267,6 @@ describe "builder" do
     it "should not wrap the action in a function" do
       expect(builder.on(:foos).after(:update).nowrap{ 'existing_procedure()' }.generate.
         grep(/CREATE FUNCTION/).size).to eql(0)
-    end
-
-    it "should reject combined use of security and nowrap" do
-      expect {
-        builder.on(:foos).after(:update).security("'user'@'host'").nowrap{ "FOO" }.generate
-      }.to raise_error /doesn't support arbitrary users for trigger security/
     end
 
     it "should allow variable declarations" do
@@ -343,7 +307,6 @@ describe "builder" do
         code = <<-CODE.strip.gsub(/^ +/, '')
           on("foos").
           of("bar").
-          security(:invoker).
           for_each(:row).
           before(:update) do |t|
             t.where("NEW.foo").declare("row RECORD") do
@@ -394,12 +357,6 @@ describe "builder" do
     it "should accept `of' columns" do
       trigger = builder.on(:foos).after(:update).of(:bar, :baz){ "BAR" }
       expect(trigger.generate.grep(/AFTER UPDATE OF bar, baz/).size).to eql(1)
-    end
-
-    it "should reject security" do
-      expect {
-        builder.on(:foos).after(:update).security(:definer){ "FOO" }.generate
-      }.to raise_error /doesn't support trigger security/
     end
 
     it "should reject for_each :statement" do

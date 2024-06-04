@@ -97,9 +97,6 @@ Optional, SQL snippet limiting when the trigger will fire. Supports delayed inte
 
 Only fire the update trigger if at least one of the columns is specified in the statement. Platforms that support it use a native `OF` clause, others will have an inferred `IF ...` statement in the trigger body. Note the former will fire even if the column's value hasn't changed; the latter will not.
 
-#### security(user)
-Permissions/role to check when calling trigger. PostgreSQL supports `:invoker` (default) and `:definer`, MySQL supports `:definer` (default) and arbitrary users (syntax: `'user'@'host'`).
-
 #### timing(timing)
 Required (but may be satisfied by `before`/`after`). Possible values are `:before`/`:after`.
 
