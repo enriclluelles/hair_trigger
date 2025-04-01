@@ -59,6 +59,7 @@ FOR EACH ROW
           select_rows(sql).each do |(name, definition)|
             triggers[name] = quote_table_name_in_trigger(definition)
           end
+        when :clickhouse
         else
           raise "don't know how to retrieve #{adapter_name} triggers yet"
       end
